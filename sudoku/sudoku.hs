@@ -1,4 +1,4 @@
-import Data.List (sort, group)
+import Data.List (sort, group, intersperse)
 import Data.Array
 import Data.Char (digitToInt)
 
@@ -31,6 +31,8 @@ instance Read Board where
                 cells = (take nCells . reverse) (foldl addcell [] s)
             in  [(Board $ array (0,nCells-1) (zip [0..nCells-1] cells), drop nCells s)]
 
+-- the list in Sudoku contains the numbers that are newly determined,
+-- and thus must be propagated
 newtype Sudoku = Sudoku { unSudoku :: (Board, [Int]) } deriving Eq
 instance Read Sudoku where
         readsPrec prec s =
@@ -77,4 +79,21 @@ rmdups = map head . group . sort
 veins :: Int -> [Int]
 veins x = (filter (/= x) . rmdups) $ (fila x) ++ (columna x) ++ (quadrat x)
 
-main = interact $ show . propaga . read
+solveSteps :: Sudoku -> [Board]
+solveSteps s =
+    let b = fst . unSudoku $ s
+        b' = propaga s
+    in  [b, b']
+
+asciiArrow :: String
+asciiArrow = lines5 ++ " ==> \n" ++ lines5
+    where lines5 = concat . take 5 . repeat $ "     \n"
+
+horCat :: String -> String -> String
+horCat s1 s2 = foldl (\acc (a, b) -> acc ++ a ++ b ++ "\n") "" $ zip (lines s1) (lines s2)
+
+horCat' :: [String] -> String
+horCat' [] = repeat '\n'
+horCat' (x:xs) = horCat x (horCat' xs)
+
+main = interact $ horCat' . intersperse asciiArrow . map show . solveSteps . read
