@@ -31,6 +31,9 @@ instance Read Board where
                 cells = (take nCells . reverse) (foldl addcell [] s)
             in  [(Board $ array (0,nCells-1) (zip [0..nCells-1] cells), drop nCells s)]
 
+isComplete :: Board -> Bool
+isComplete (Board b) = and . map isDeterminated . elems $ b
+
 -- the list in Sudoku contains the numbers that are newly determined,
 -- and thus must be propagated
 newtype Sudoku = Sudoku { unSudoku :: (Board, [Int]) } deriving Eq
@@ -44,28 +47,28 @@ instance Show Sudoku where
 
 elimina :: Int -> Board -> Sudoku
 elimina x (Board b) =
-    let vs = veins x
+    let vs = neighbors x
         n = head . unCell $ (b!x)
         changes = zip vs $ map Cell [filter (/= n) (unCell (b!v)) | v <- vs]
         b' = b // changes
         l' = filter (\v -> and [(not $ isDeterminated (b!v)), (isDeterminated (b'!v))]) vs
     in Sudoku (Board b', l')
 
-propaga :: Sudoku -> Board
-propaga (Sudoku (b, [])) =  b
-propaga (Sudoku (b, x:xs)) = propaga $ Sudoku (b', xs ++ xs')
+propagate :: Sudoku -> Board
+propagate (Sudoku (b, [])) =  b
+propagate (Sudoku (b, x:xs)) = propagate $ Sudoku (b', xs ++ xs')
     where (Sudoku (b', xs')) = elimina x b
 
-fila :: Int -> [Int]
-fila x = [a .. (a+8)]
+row :: Int -> [Int]
+row x = [a .. (a+8)]
     where a = (x `div` 9)*9
 
-columna :: Int -> [Int]
-columna x = map (+a) [0,9..80]
+column :: Int -> [Int]
+column x = map (+a) [0,9..80]
     where a = x `mod` 9
 
-quadrat :: Int -> [Int]
-quadrat x =
+square :: Int -> [Int]
+square x =
     let j = x `div` 9
         i = x `mod` 9
         j' = (j `div` 3)*3
@@ -76,13 +79,13 @@ quadrat x =
 rmdups :: (Ord a) => [a] -> [a]
 rmdups = map head . group . sort
 
-veins :: Int -> [Int]
-veins x = (filter (/= x) . rmdups) $ (fila x) ++ (columna x) ++ (quadrat x)
+neighbors :: Int -> [Int]
+neighbors x = (filter (/= x) . rmdups) $ (row x) ++ (column x) ++ (square x)
 
 solveSteps :: Sudoku -> [Board]
 solveSteps s =
     let b = fst . unSudoku $ s
-        b' = propaga s
+        b' = propagate s
     in  [b, b']
 
 asciiArrow :: String
