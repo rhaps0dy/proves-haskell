@@ -1,6 +1,7 @@
-import Data.List (sort, group, intersperse)
+import Data.List (sort, group, intersperse, partition)
 import Data.Array
 import Data.Char (digitToInt)
+import Data.Maybe
 
 nCells :: Int
 nCells = 9*9
@@ -45,19 +46,26 @@ instance Read Sudoku where
 instance Show Sudoku where
         showsPrec _ (Sudoku (b, xs)) = (++ show b ++ show xs)
 
-elimina :: Int -> Board -> Sudoku
+eliminateCell :: Int -> Cell -> Maybe Cell
+eliminateCell n (Cell c) =
+    let c' = filter (/= n) c
+    in  if null c' then Nothing else Just (Cell c)
+
+elimina :: Int -> Board -> Maybe Sudoku
 elimina x (Board b) =
     let vs = neighbors x
-        n = head . unCell $ (b!x)
-        changes = zip vs $ map Cell [filter (/= n) (unCell (b!v)) | v <- vs]
-        b' = b // changes
+        elim = eliminateCell (head . unCell $ (b!x))
+        changes = fmap (zip vs) (sequence [elim (b!v) | v <- vs])
+        b' = b // (fromJust changes)
         l' = filter (\v -> and [(not $ isDeterminated (b!v)), (isDeterminated (b'!v))]) vs
-    in Sudoku (Board b', l')
+    in  if changes == Nothing then Nothing else Just (Sudoku (Board b', l'))
 
-propagate :: Sudoku -> Board
-propagate (Sudoku (b, [])) =  b
-propagate (Sudoku (b, x:xs)) = propagate $ Sudoku (b', xs ++ xs')
-    where (Sudoku (b', xs')) = elimina x b
+propagate :: Sudoku -> Maybe Board
+propagate (Sudoku (b, [])) =  Just b
+propagate (Sudoku (b, x:xs)) =
+        let s = elimina x b
+            (Sudoku (b', xs')) = fromJust s
+        in  if s == Nothing then Nothing else propagate $ Sudoku (b', xs ++ xs')
 
 row :: Int -> [Int]
 row x = [a .. (a+8)]
@@ -82,11 +90,25 @@ rmdups = map head . group . sort
 neighbors :: Int -> [Int]
 neighbors x = (filter (/= x) . rmdups) $ (row x) ++ (column x) ++ (square x)
 
+listApply :: [a -> b] -> [a] -> [b]
+listApply fs xs = map (\(f, x) -> f x) $ zip fs xs
+
+solve :: Sudoku -> Maybe Board
+solve s
+    | maybeb == Nothing    = Nothing
+    | isComplete (Board b) = Just (Board b)
+    | null possibilities   = Nothing
+    | otherwise            = head possibilities
+    where maybeb = propagate s
+          Just (Board b) = maybeb
+          idx = head . filter (not . isDeterminated . (b!)) $ indices b
+          arrs = [b // [(idx, Cell [n])] | n <- unCell (b!idx)]
+          possibilities = filter (/= Nothing) $ map (\a -> solve $ Sudoku (Board a, [idx])) arrs
+
 solveSteps :: Sudoku -> [Board]
-solveSteps s =
-    let b = fst . unSudoku $ s
-        b' = propagate s
-    in  [b, b']
+solveSteps s@(Sudoku (b, _)) = b:(if b' == Nothing then [] else [fromJust b'])
+    where b' = solve s
+
 
 asciiArrow :: String
 asciiArrow = lines5 ++ " ==> \n" ++ lines5
